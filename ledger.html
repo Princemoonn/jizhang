@@ -57,7 +57,6 @@
   .stamp{width:34px;height:34px;flex:none;display:grid;place-items:center;border:1.5px solid var(--c);border-radius:7px;color:var(--c);font-weight:700;font-size:16px}
   .row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
   .row-cat{font-size:15px}
-  .mrow .row-cat{font-weight:600}
   .row-note{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none}
   .row-amt{font-family:var(--num);font-size:17px;font-variant-numeric:tabular-nums}
@@ -425,22 +424,26 @@ function renderMonth(){
 
   renderBreakdown(byCat,out,'支出分类');
 
-  const days={};
-  list.forEach(e=>(days[e.date]=days[e.date]||[]).push(e));
-  const keys=Object.keys(days).sort().reverse();
-  if(!keys.length){
+  if(!list.length){
     $('ledger').innerHTML=`<div class="empty">${isNow?'这个月还没有记录。<br>点下方「记一笔」开始。':'这个月没有记录。'}</div>`;
     return;
   }
+  $('ledger').innerHTML=dayList(list);
+}
+
+function dayList(list){
+  const days={};
+  list.forEach(e=>(days[e.date]=days[e.date]||[]).push(e));
+  const keys=Object.keys(days).sort().reverse();
   const t=todayStr();
   const yd=new Date();yd.setDate(yd.getDate()-1);
   const y=`${yd.getFullYear()}-${pad(yd.getMonth()+1)}-${pad(yd.getDate())}`;
-  $('ledger').innerHTML=keys.map(d=>{
-    const items=days[d].sort((a,b)=>b.ts-a.ts);
+  return keys.map(d=>{
+    const items=days[d].slice().sort((a,b)=>b.ts-a.ts);
     const dOut=items.filter(e=>e.type==='out').reduce((s,e)=>s+toGBP(e.amount,e.cur),0);
     const dIn=items.filter(e=>e.type==='in').reduce((s,e)=>s+toGBP(e.amount,e.cur),0);
     const [yy,mm,dd]=d.split('-').map(Number);
-    const name=d===t?'今天':d===y?'昨天':`${mm}月${dd}日`;
+    const name=d===t?'今天':d===y?'昨天':yy===now.getFullYear()?`${mm}月${dd}日`:`${yy}年${mm}月${dd}日`;
     const totals=[dOut?`支出 ${money(dOut)}`:'',dIn?`收入 ${money(dIn)}`:''].filter(Boolean).join('　');
     return `<div class="day-head"><span>${name} ${WD[new Date(yy,mm-1,dd).getDay()]}</span><span>${totals}</span></div>`+
       items.map(e=>{
@@ -458,13 +461,11 @@ function renderMonth(){
 }
 
 function renderTotal(){
-  let out=0,inc=0;const byCat={},months={};
+  let out=0,inc=0;const byCat={};
   data.entries.forEach(e=>{
     const g=toGBP(e.amount,e.cur);
-    const mk=e.date.slice(0,7);
-    const mo=months[mk]=months[mk]||{out:0,inc:0};
-    if(e.type==='out'){out+=g;mo.out+=g;byCat[e.cat]=(byCat[e.cat]||0)+g;}
-    else{inc+=g;mo.inc+=g;}
+    if(e.type==='out'){out+=g;byCat[e.cat]=(byCat[e.cat]||0)+g;}
+    else inc+=g;
   });
   const initG=toGBP(data.initial,data.initialCur);
   $('monthLabel').textContent='全部记录';
@@ -491,19 +492,7 @@ function renderTotal(){
     :'';
   const tools=`${rateLine}<div class="tools"><button class="text-btn" id="rateBtn">汇率设置</button><button class="text-btn" id="backupBtn">备份与恢复</button></div>`;
 
-  const mks=Object.keys(months).sort().reverse();
-  if(!mks.length){
-    $('ledger').innerHTML='<div class="empty">还没有任何记录。<br>点下方「记一笔」开始。</div>'+tools;
-    return;
-  }
-  $('ledger').innerHTML=`<div class="day-head"><span>按月汇总</span><span>点月份看明细</span></div>`+mks.map(mk=>{
-    const o=months[mk],net=o.inc-o.out;
-    const [yy,mm]=mk.split('-').map(Number);
-    return `<button class="row mrow" data-month="${mk}">
-      <span class="row-main"><span class="row-cat">${yy}年${mm}月</span><span class="row-note">收入 ${money(o.inc)}　支出 ${money(o.out)}</span></span>
-      <span class="row-amt ${net>0?'in':''}">${net>0?'+':''}${money(net)}</span>
-    </button>`;
-  }).join('')+tools;
+  $('ledger').innerHTML=(n?dayList(data.entries):'<div class="empty">还没有任何记录。<br>点下方「记一笔」开始。</div>')+tools;
 }
 
 function renderForm(){
@@ -607,8 +596,6 @@ document.querySelectorAll('.mode button').forEach(b=>b.onclick=()=>{mode=b.datas
 $('ledger').onclick=e=>{
   if(e.target.closest('#backupBtn')){openBackup();return;}
   if(e.target.closest('#rateBtn')){openRates();return;}
-  const mr=e.target.closest('[data-month]');
-  if(mr){const [y,m]=mr.dataset.month.split('-').map(Number);view={y,m:m-1};mode='month';render();window.scrollTo(0,0);return;}
   const r=e.target.closest('.row');if(r) openSheet(data.entries.find(x=>x.id===r.dataset.id));
 };
 document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{
